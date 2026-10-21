@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Country Info</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    h1 { color: #1F4E79; }
+    #result { background: #f7f9fc; border: 1px solid #d0dff0; border-radius: 8px; padding: 20px; margin-top: 20px; }
+    button { background: #2E75B6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+    button:hover { background: #1F4E79; }
+    input { padding: 8px; font-size: 16px; width: 250px; }
+    #result img { height: 40px; border: 1px solid #ccc; vertical-align: middle; margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Country Info</h1>
+  <input type="text" id="countryInput" placeholder="Enter a country name">
+  <button id="searchButton">Search</button>
+  <div id="result">Enter a country name above and click Search.</div>
+
+<script>
+// Data: World Bank Open Data API (no API key). Flags: flagcdn.com (no API key).
+const WB = "https://api.worldbank.org/v2";
+
+// Common names that differ from the World Bank's official spelling
+const ALIASES = {
+  "usa": "united states", "us": "united states", "america": "united states",
+  "uk": "united kingdom", "britain": "united kingdom", "england": "united kingdom",
+  "south korea": "korea, rep.", "north korea": "korea, dem. people's rep.",
+  "russia": "russian federation", "egypt": "egypt, arab rep.", "iran": "iran, islamic rep.",
+  "syria": "syrian arab republic", "venezuela": "venezuela, rb", "vietnam": "viet nam",
+  "turkey": "turkiye", "ivory coast": "cote d'ivoire", "czech republic": "czechia",
+  "bahamas": "bahamas, the", "gambia": "gambia, the", "laos": "lao pdr",
+  "yemen": "yemen, rep.", "slovakia": "slovak republic", "kyrgyzstan": "kyrgyz republic"
+};
+
+const input = document.getElementById("countryInput");
+const result = document.getElementById("result");
+let countriesCache = null;
+
+document.getElementById("searchButton").addEventListener("click", loadCountry);
+input.addEventListener("keydown", e => { if (e.key === "Enter") loadCountry(); });
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("The data service returned an error (" + res.status + ").");
+  return res.json();
+}
+
+async function getCountries() {
+  if (countriesCache) return countriesCache;
+  const json = await getJSON(WB + "/country?format=json&per_page=400");
+  // Remove regional groupings such as "Arab World" or "Africa"
+  countriesCache = json[1].filter(c => c.region.value !== "Aggregates");
+  return countriesCache;
+}
+
+function findCountry(list, query) {
+  let q = query.toLowerCase();
+  q = ALIASES[q] || q;
+  return (
+    list.find(c => c.name.toLowerCase() === q || c.id.toLowerCase() === q || c.iso2Code.toLowerCase() === q) ||
+    list.find(c => c.name.toLowerCase().startsWith(q)) ||
+    list.find(c => c.name.toLowerCase().includes(q))
+  );
+}
+
+async function getPopulation(code) {
+  // mrnev=1 returns the most recent non-empty value
+  const json = await getJSON(WB + "/country/" + code + "/indicator/SP.POP.TOTL?format=json&mrnev=1");
+  const row = json[1]?.[0];
+  return row && row.value != null ? { value: row.value, year: row.date } : null;
+}
+
+function addLine(parent, label, value) {
+  const p = document.createElement("p");
+  const strong = document.createElement("strong");
+  strong.textContent = label + ": ";
+  p.append(strong, value);
+  parent.appendChild(p);
+}
+
+async function loadCountry() {
+  const query = input.value.trim();
+  if (!query) {
+    result.textContent = "Please enter a country name.";
+    return;
+  }
+  result.textContent = "Loading...";
+
+  try {
+    const countries = await getCountries();
+    const info = findCountry(countries, query);
+    if (!info) throw new Error("No country found with that name.");
+
+    const pop = await getPopulation(info.id).catch(() => null);
+
+    result.innerHTML = "";
+    const title = document.createElement("h2");
+    const flag = document.createElement("img");
+    flag.src = "https://flagcdn.com/w80/" + info.iso2Code.toLowerCase() + ".png";
+    flag.alt = "Flag of " + info.name;
+    flag.onerror = () => flag.remove();
+    title.append(flag, info.name);
+    result.appendChild(title);
+
+    addLine(result, "Capital", info.capitalCity || "N/A");
+    addLine(result, "Region", info.region.value.trim());
+    addLine(result, "Population", pop ? pop.value.toLocaleString() + " (" + pop.year + ")" : "N/A");
+  } catch (error) {
+    console.error(error);
+    result.textContent = error instanceof TypeError
+      ? "Couldn't reach the data service. Check your internet connection or whether something is blocking the request."
+      : "Error: " + error.message;
+  }
+}
+</script>
+</body>
+</html>
