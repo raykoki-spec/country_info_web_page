@@ -9,7 +9,7 @@ A html file that looks up basic fears of a country by combining info from two di
 - Asks the user to type in the country.
 - Shows the flag, capital city, region of country's location and population.
 - It has a clear error message.
-- Has a responsive layout that can workon phone. 
+- Has a responsive layout that can work on phone. 
 
 
 
